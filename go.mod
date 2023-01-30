@@ -6,7 +6,7 @@ require (
 	github.com/Telmate/proxmox-api-go v0.0.0-20221101100531-73720ef02c2e
 	github.com/hashicorp/go-cty v1.4.1-0.20200414143053-d3edf31b6320
 	github.com/hashicorp/terraform-plugin-sdk/v2 v2.24.1
-	github.com/rs/zerolog v1.28.0
+	github.com/rs/zerolog v1.29.0
 
 )
 
