@@ -954,7 +954,6 @@ func resourceVmQemuCreate(d *schema.ResourceData, meta interface{}) error {
 	qemuVgaList := vga.List()
 
 	qemuNetworks, _ := ExpandDevicesList(d.Get("network").([]interface{}))
-	qemuDisks, _ := ExpandDevicesList(d.Get("disk").([]interface{}))
 
 	serials := d.Get("serial").(*schema.Set)
 	qemuSerials, _ := DevicesSetToMap(serials)
@@ -991,7 +990,6 @@ func resourceVmQemuCreate(d *schema.ResourceData, meta interface{}) error {
 		Tags:           d.Get("tags").(string),
 		Args:           d.Get("args").(string),
 		QemuNetworks:   qemuNetworks,
-		QemuDisks:      qemuDisks,
 		QemuSerials:    qemuSerials,
 		QemuPCIDevices: qemuPCIDevices,
 		QemuUsbs:       qemuUsbs,
@@ -1004,6 +1002,11 @@ func resourceVmQemuCreate(d *schema.ResourceData, meta interface{}) error {
 		Sshkeys:      d.Get("sshkeys").(string),
 		Ipconfig:     pxapi.IpconfigMap{},
 	}
+
+	config.Disks = mapToStruct_QemuStorages(d)
+	setIso(d, &config)
+	setCloudInitDisk(d, &config)
+
 	// Populate Ipconfig map
 	for i := 0; i < 16; i++ {
 		iface := fmt.Sprintf("ipconfig%d", i)
@@ -1028,6 +1031,9 @@ func resourceVmQemuCreate(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	vmr := dupVmr
+
+	var rebootRequired bool
+	var err error
 
 	if vmr == nil {
 		// get unique id
@@ -1077,45 +1083,16 @@ func resourceVmQemuCreate(d *schema.ResourceData, meta interface{}) error {
 			// give sometime to proxmox to catchup
 			time.Sleep(time.Duration(d.Get("clone_wait").(int)) * time.Second)
 
-			config_post_clone, err := pxapi.NewConfigQemuFromApi(vmr, client)
-			if err != nil {
-				return err
-			}
-
-			logger.Debug().Str("vmid", d.Id()).Msgf("Original disks: '%+v', Clone Disks '%+v'", config.QemuDisks, config_post_clone.QemuDisks)
-
-			// update the current working state to use the appropriate file specification
-			// proxmox needs so we can correctly update the existing disks (post-clone)
-			// instead of accidentially causing the existing disk to be detached.
-			// see https://github.com/Telmate/terraform-provider-proxmox/issues/239
-			for slot, disk := range config_post_clone.QemuDisks {
-				// only update the desired configuration if it was not set by the user
-				// we do not want to overwrite the desired config with the results from
-				// proxmox if the user indicates they wish a particular file or volume config
-				if config.QemuDisks[slot]["file"] == "" {
-					config.QemuDisks[slot]["file"] = disk["file"]
-				}
-				if config.QemuDisks[slot]["volume"] == "" {
-					config.QemuDisks[slot]["volume"] = disk["volume"]
-				}
-			}
-
-			err = config.UpdateConfig(vmr, client)
+			rebootRequired, err = config.Update(false, vmr, client)
 			if err != nil {
 				// Set the id because when update config fail the vm is still created
 				d.SetId(resourceId(targetNode, "qemu", vmr.VmId()))
 				return err
 			}
 
-			err = prepareDiskSize(client, vmr, qemuDisks, d)
-			if err != nil {
-				d.SetId(resourceId(targetNode, "qemu", vmr.VmId()))
-				return err
-			}
-
 		} else if d.Get("iso").(string) != "" {
 			config.QemuIso = d.Get("iso").(string)
-			err := config.CreateVm(vmr, client)
+			err := config.Create(vmr, client)
 			if err != nil {
 				return err
 			}
@@ -1142,7 +1119,7 @@ func resourceVmQemuCreate(d *schema.ResourceData, meta interface{}) error {
 				return fmt.Errorf("no network boot option matched in 'boot' config")
 			}
 
-			err := config.CreateVm(vmr, client)
+			err := config.Create(vmr, client)
 			if err != nil {
 				return err
 			}
@@ -1154,34 +1131,16 @@ func resourceVmQemuCreate(d *schema.ResourceData, meta interface{}) error {
 
 		client.StopVm(vmr)
 
-		err := config.UpdateConfig(vmr, client)
+		rebootRequired, err = config.Update(false, vmr, client)
 		if err != nil {
 			// Set the id because when update config fail the vm is still created
 			d.SetId(resourceId(targetNode, "qemu", vmr.VmId()))
 			return err
 		}
 
-		// give sometime to proxmox to catchup
-		// time.Sleep(time.Duration(d.Get("additional_wait").(int)) * time.Second)
-
-		err = prepareDiskSize(client, vmr, qemuDisks, d)
-		if err != nil {
-			return err
-		}
 	}
 	d.SetId(resourceId(targetNode, "qemu", vmr.VmId()))
 	logger.Debug().Int("vmid", vmr.VmId()).Msgf("Set this vm (resource Id) to '%v'", d.Id())
-
-	if d.Get("cloudinit_cdrom_storage").(string) != "" {
-		vmParams := map[string]interface{}{
-			"cdrom": fmt.Sprintf("%s:cloudinit", d.Get("cloudinit_cdrom_storage").(string)),
-		}
-
-		_, err := client.SetVmConfig(vmr, vmParams)
-		if err != nil {
-			return err
-		}
-	}
 
 	// give sometime to proxmox to catchup
 	time.Sleep(time.Duration(d.Get("additional_wait").(int)) * time.Second)
@@ -1203,10 +1162,7 @@ func resourceVmQemuCreate(d *schema.ResourceData, meta interface{}) error {
 		log.Print("[DEBUG][QemuVmCreate] oncreate = false, not starting VM")
 	}
 
-	// err := initConnInfo(d, pconf, client, vmr, &config, lock)
-	// if err != nil {
-	// 	return err
-	// }
+	d.Set("reboot_required", rebootRequired)
 	log.Print("[DEBUG][QemuVmCreate] vm creation done!")
 	lock.unlock()
 	return resourceVmQemuRead(d, meta)
@@ -1235,16 +1191,6 @@ func resourceVmQemuUpdate(ctx context.Context, d *schema.ResourceData, meta inte
 	}
 	vga := d.Get("vga").(*schema.Set)
 	qemuVgaList := vga.List()
-
-	// okay, so the proxmox-api-go library is a bit weird about the updates. we can only send certain
-	// parameters about the disk over otherwise a crash happens (if we send file), or it sends duplicate keys
-	// to proxmox (if we send media). this is a bit hacky.. but it should paper over these issues until a more
-	// robust solution can be found.
-	qemuDisks, _ := ExpandDevicesList(d.Get("disk").([]interface{}))
-	for _, diskParamMap := range qemuDisks {
-		delete(diskParamMap, "file")  // removed; causes a crash in proxmox-api-go
-		delete(diskParamMap, "media") // removed; results in a duplicate key issue causing a 400 from proxmox
-	}
 
 	qemuNetworks, err := ExpandDevicesList(d.Get("network").([]interface{}))
 	if err != nil {
@@ -1303,7 +1249,6 @@ func resourceVmQemuUpdate(ctx context.Context, d *schema.ResourceData, meta inte
 		Tags:           d.Get("tags").(string),
 		Args:           d.Get("args").(string),
 		QemuNetworks:   qemuNetworks,
-		QemuDisks:      qemuDisks,
 		QemuSerials:    qemuSerials,
 		QemuPCIDevices: qemuPCIDevices,
 		QemuUsbs:       qemuUsbs,
@@ -1337,35 +1282,19 @@ func resourceVmQemuUpdate(ctx context.Context, d *schema.ResourceData, meta inte
 		config.QemuVga = qemuVgaList[0].(map[string]interface{})
 	}
 
+	config.Disks = mapToStruct_QemuStorages(d)
+	setIso(d, &config)
+	setCloudInitDisk(d, &config)
+
 	logger.Debug().Int("vmid", vmID).Msgf("Updating VM with the following configuration: %+v", config)
 
-	err = config.UpdateConfig(vmr, client)
+	var rebootRequired bool
+	// don't let the update function hande the reboot as it can't deal with cloud init changes yet
+	rebootRequired, err = config.Update(false, vmr, client)
 	if err != nil {
 		return diag.FromErr(err)
 	}
-
-	// give sometime to proxmox to catchup
-	time.Sleep(time.Duration(d.Get("additional_wait").(int)) * time.Second)
-
-	prepareDiskSize(client, vmr, qemuDisks, d)
-
-	// give sometime to proxmox to catchup
-	time.Sleep(time.Duration(d.Get("additional_wait").(int)) * time.Second)
-
-	if d.HasChange("pool") {
-		oldPool, newPool := func() (string, string) {
-			a, b := d.GetChange("pool")
-			return a.(string), b.(string)
-		}()
-
-		vmr := pxapi.NewVmRef(vmID)
-		vmr.SetPool(oldPool)
-
-		_, err := client.UpdateVMPool(vmr, newPool)
-		if err != nil {
-			return diag.FromErr(err)
-		}
-	}
+	d.Set("reboot_required", rebootRequired)
 
 	err = initConnInfo(d, pconf, client, vmr, &config, lock)
 	if err != nil {
@@ -1451,51 +1380,6 @@ func resourceVmQemuUpdate(ctx context.Context, d *schema.ResourceData, meta inte
 		}
 	}
 
-	// some of the disk changes require reboot, even if hotplug is enabled
-	if d.HasChange("disk") {
-		oldValuesRaw, newValuesRaw := d.GetChange("disk")
-		oldValues := oldValuesRaw.([]interface{})
-		newValues := newValuesRaw.([]interface{})
-		if len(oldValues) != len(newValues) && !strings.Contains(d.Get("hotplug").(string), "disk") {
-			// disk added or removed AND there is no disk hot(un)plug
-			d.Set("reboot_required", true)
-		} else {
-			r := len(oldValues)
-
-			// we have have to check if the new configuration has fewer disks
-			// otherwise an index out of range panic occurs if we don't reduce the range
-			if rangeNV := len(newValues); rangeNV < r {
-				r = rangeNV
-			}
-
-			// some of the existing disk parameters have changed
-			for i := 0; i < r; i++ { // loop through the interfaces
-				if oldValues[i].(map[string]interface{})["ssd"] != newValues[i].(map[string]interface{})["ssd"] {
-					d.Set("reboot_required", true)
-				}
-				if oldValues[i].(map[string]interface{})["iothread"] != newValues[i].(map[string]interface{})["iothread"] {
-					d.Set("reboot_required", true)
-				}
-				if oldValues[i].(map[string]interface{})["discard"] != newValues[i].(map[string]interface{})["discard"] {
-					d.Set("reboot_required", true)
-				}
-				if oldValues[i].(map[string]interface{})["cache"] != newValues[i].(map[string]interface{})["cache"] {
-					d.Set("reboot_required", true)
-				}
-				if oldValues[i].(map[string]interface{})["size"] != newValues[i].(map[string]interface{})["size"] {
-					d.Set("reboot_required", true)
-				}
-				// these paramater changes only require reboot if disk hotplug is disabled
-				if !strings.Contains(d.Get("hotplug").(string), "disk") {
-					if oldValues[i].(map[string]interface{})["type"] != newValues[i].(map[string]interface{})["type"] {
-						// note: changing type does not remove the old disk
-						d.Set("reboot_required", true)
-					}
-				}
-			}
-		}
-	}
-
 	var diags diag.Diagnostics
 
 	// Try rebooting the VM is a reboot is required and automatic_reboot is
@@ -1512,6 +1396,8 @@ func resourceVmQemuUpdate(ctx context.Context, d *schema.ResourceData, meta inte
 				if err != nil {
 					return diag.FromErr(err)
 				}
+				// Set reboot_required to false if reboot was successfull
+				d.Set("reboot_required", false)
 			}
 		} else {
 			// Automatic reboots is not enabled, show the user a warning message that
@@ -1535,6 +1421,8 @@ func resourceVmQemuUpdate(ctx context.Context, d *schema.ResourceData, meta inte
 		if err != nil {
 			return diag.FromErr(err)
 		}
+		// Set reboot_required to false if vm was not running.
+		d.Set("reboot_required", false)
 	} else if err != nil {
 		diags = append(diags, diag.FromErr(err)...)
 		return diags
@@ -1652,6 +1540,11 @@ func _resourceVmQemuRead(d *schema.ResourceData, meta interface{}) error {
 	d.Set("ipconfig13", config.Ipconfig[13])
 	d.Set("ipconfig14", config.Ipconfig[14])
 	d.Set("ipconfig15", config.Ipconfig[15])
+
+	d.Set("linked_vmid", config.LinkedVmId)
+	d.Set("disks", mapFromStruct_ConfigQemu(config.Disks))
+	d.Set("iso", getIso(config.Disks))
+	d.Set("cloudinit_cdrom_storage", getCloudInitDisk(config.Disks))
 
 	// Some dirty hacks to populate undefined keys with default values.
 	checkedKeys := []string{"force_create", "define_connection_info", "oncreate"}
@@ -1832,56 +1725,6 @@ func resourceVmQemuDelete(d *schema.ResourceData, meta interface{}) error {
 
 	_, err = client.DeleteVm(vmr)
 	return err
-}
-
-// Increase disk size if original disk was smaller than new disk.
-func prepareDiskSize(
-	client *pxapi.Client,
-	vmr *pxapi.VmRef,
-	diskConfMap pxapi.QemuDevices,
-	d *schema.ResourceData,
-) error {
-	logger, _ := CreateSubLogger("prepareDiskSize")
-	clonedConfig, err := pxapi.NewConfigQemuFromApi(vmr, client)
-	if err != nil {
-		return err
-	}
-	// log.Printf("%s", clonedConfig)
-	for diskID, diskConf := range diskConfMap {
-		diskName := fmt.Sprintf("%v%v", diskConf["type"], diskID)
-
-		diskSize := pxapi.DiskSizeGB(diskConf["size"])
-
-		if _, diskExists := clonedConfig.QemuDisks[diskID]; !diskExists {
-			return err
-		}
-
-		clonedDiskSize := pxapi.DiskSizeGB(clonedConfig.QemuDisks[diskID]["size"])
-
-		if err != nil {
-			return err
-		}
-
-		logger.Debug().Int("diskId", diskID).Msgf("Checking disk sizing. Original '%+v', New '%+v'", fmt.Sprintf("%vG", clonedDiskSize), fmt.Sprintf("%vG", diskSize))
-		if diskSize > clonedDiskSize {
-			logger.Debug().Int("diskId", diskID).Msgf("Resizing disk")
-			for ii := 0; ii < 5; ii++ {
-				_, err = client.ResizeQemuDiskRaw(vmr, diskName, fmt.Sprintf("%vG", diskSize))
-				if err == nil {
-					break
-				}
-				logger.Debug().Int("diskId", diskID).Msgf("Error returned from api: %+v", err)
-				// wait before next try
-				time.Sleep(time.Duration(d.Get("additional_wait").(int)) * time.Second)
-			}
-		} else if diskSize == clonedDiskSize || diskSize <= 0 {
-			logger.Debug().Int("diskId", diskID).Msgf("Disk is same size as before, skipping resize. Original '%+v', New '%+v'", fmt.Sprintf("%vG", clonedDiskSize), fmt.Sprintf("%vG", diskSize))
-		} else {
-			return fmt.Errorf("proxmox does not support decreasing disk size. Disk '%v' wanted to go from '%vG' to '%vG'", diskName, fmt.Sprintf("%vG", clonedDiskSize), fmt.Sprintf("%vG", diskSize))
-		}
-
-	}
-	return nil
 }
 
 // Converting from schema.TypeSet to map of id and conf for each device,
