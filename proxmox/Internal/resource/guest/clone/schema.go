@@ -14,9 +14,10 @@ import (
 const (
 	Root = "clone"
 
-	SchemaID     = "id"
-	SchemaName   = "name"
-	schemaLinked = "linked"
+	SchemaID      = "id"
+	SchemaName    = "name"
+	schemaLinked  = "linked"
+	schemaStorage = "storage"
 
 	defaultLinked = false
 
@@ -61,8 +62,20 @@ func Schema() *schema.Schema {
 						return diag.FromErr(pveSDK.GuestName(v).Validate())
 					}},
 				schemaLinked: {
-					Type:     schema.TypeBool,
-					Optional: true,
-					ForceNew: true,
-					Default:  defaultLinked}}}}
+					Type:          schema.TypeBool,
+					Optional:      true,
+					ForceNew:      true,
+					Default:       defaultLinked,
+					ConflictsWith: []string{prefix + schemaStorage}},
+				schemaStorage: {
+					Type:          schema.TypeString,
+					Optional:      true,
+					ConflictsWith: []string{prefix + schemaLinked},
+					ValidateDiagFunc: func(i any, k cty.Path) diag.Diagnostics {
+						v, ok := i.(string)
+						if !ok {
+							return diag.Diagnostics{errorMSG.StringDiagnostic(schemaStorage)}
+						}
+						return diag.FromErr(pveSDK.StorageName(v).Validate())
+					}}}}}
 }

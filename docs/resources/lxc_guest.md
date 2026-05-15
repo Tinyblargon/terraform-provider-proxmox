@@ -77,11 +77,12 @@ resource "proxmox_lxc_guest" "minimal-example" {
 
 The `clone` field is used to configure the clone settings. It may only be specified once.
 
-| Argument       | Type    | Default Value | Description |
-|:---------------|---------|---------------|:------------|
-| `id`           | `int`   |               | **Forces Recreation**: The numeric ID of the source container to clone from.|
-| `linked`       | `bool`  | `false`       | **Forces Recreation**: Wheter the clone should be a linked clone.|
-| `name`         | `string`|               | **Forces Recreation**: The name of the source container to clone from. Either `id` or `name` must be specified.|
+| Argument       | Type    | Default Value | Description
+|:---------------|---------|---------------|:-----------
+| `id`           | `int`   |               | **Forces Recreation**: The numeric ID of the source container to clone from.
+| `linked`       | `bool`  | `false`       | **Forces Recreation**: Wheter the clone should be a linked clone. Mutually exclusive with `clone.storage`.
+| `name`         | `string`|               | **Forces Recreation**: The name of the source container to clone from. Either `id` or `name` must be specified.
+| `storage`      | `string`|               | Storage to use for the clone. Mutually exclusive with `clone.linked`.
 
 ### CPU Reference
 

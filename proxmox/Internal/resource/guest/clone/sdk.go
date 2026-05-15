@@ -40,12 +40,17 @@ func SDK(d *schema.ResourceData, s Settings) *Return {
 				Name: s.Name,
 				Node: s.Node}}}
 	}
+	var storage *string
+	if v := settings[schemaStorage].(string); v != "" {
+		storage = &v
+	}
 	return &Return{
 		ID:   pveSDK.GuestID(settings[SchemaID].(int)),
 		Name: pveSDK.GuestName(settings[SchemaName].(string)),
 		Target: pveSDK.CloneLxcTarget{Full: &pveSDK.CloneLxcFull{
-			ID:   s.ID,
-			Name: s.Name,
-			Node: s.Node,
-			Pool: s.Pool}}}
+			ID:      s.ID,
+			Name:    s.Name,
+			Node:    s.Node,
+			Pool:    s.Pool,
+			Storage: storage}}}
 }
