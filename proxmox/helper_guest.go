@@ -16,11 +16,11 @@ func guestDelete(ctx context.Context, d *schema.ResourceData, meta any, kind str
 	lock := pmParallelBegin(pconf)
 	defer lock.unlock()
 
-	client := pconf.Client
+	client := pconf.NewClient
 	rawID, _ := strconv.Atoi(path.Base(d.Id()))
 	guestID := pveSDK.GuestID(rawID)
 
-	if err := pveSDK.NewVmRef(guestID).Delete(ctx, client); err != nil {
+	if _, err := client.Guest.Delete(ctx, *pveSDK.NewVmRef(guestID)); err != nil {
 		if errors.Is(err, pveSDK.Error.GuestDoesNotExist()) {
 			return diag.Diagnostics{{
 				Summary:  "guest of type " + kind + " with ID " + guestID.String() + " already removed",
