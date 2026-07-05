@@ -79,19 +79,20 @@ func terraformAffinity(affinity []uint) string {
 			rangeEnd = affinity[i]
 		} else {
 			// Close the current range and start a new range
-			if rangeStart == rangeEnd {
-				builder.WriteString(strconv.Itoa(int(rangeStart)) + ",")
-			} else {
-				builder.WriteString(strconv.Itoa(int(rangeStart)) + "-" + strconv.Itoa(int(rangeEnd)) + ",")
+			builder.WriteString(strconv.Itoa(int(rangeStart)))
+			if rangeStart != rangeEnd {
+				builder.WriteRune('-')
+				builder.WriteString(strconv.Itoa(int(rangeEnd)))
 			}
+			builder.WriteRune(',')
 			rangeStart, rangeEnd = affinity[i], affinity[i]
 		}
 	}
 	// Append the last range
-	if rangeStart == rangeEnd {
-		builder.WriteString(strconv.Itoa(int(rangeStart)))
-	} else {
-		builder.WriteString(strconv.Itoa(int(rangeStart)) + "-" + strconv.Itoa(int(rangeEnd)))
+	builder.WriteString(strconv.Itoa(int(rangeStart)))
+	if rangeStart != rangeEnd {
+		builder.WriteRune('-')
+		builder.WriteString(strconv.Itoa(int(rangeEnd)))
 	}
 	return builder.String()
 }
