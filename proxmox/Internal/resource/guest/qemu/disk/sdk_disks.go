@@ -461,9 +461,6 @@ func sdk_Disks_QemuVirtIOStorage(key string, schema map[string]any) *pveAPI.Qemu
 		}
 		return &pveAPI.QemuVirtIOStorage{Passthrough: &passthrough}
 	}
-	if v, ok := storageSchema[schemaCdRom].([]any); ok && len(v) == 1 && v[0] != nil {
-		return &pveAPI.QemuVirtIOStorage{CdRom: sdk_Disks_QemuCdRom(v)}
-	}
 	if v, ok := storageSchema[schemaIgnore]; ok {
 		if v.(bool) {
 			return nil // Don't change anything

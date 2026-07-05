@@ -245,7 +245,7 @@ func subSchemaUnits() *schema.Schema {
 			if !ok {
 				return diag.Errorf(schemaUnits + " must be an integer")
 			}
-			if err := pveSDK.CpuUnits(v).Validate(); err != nil {
+			if err := pveSDK.QemuCpuUnits(v).Validate(); err != nil {
 				return diag.FromErr(err)
 			}
 			return nil

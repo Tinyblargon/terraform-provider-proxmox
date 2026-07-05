@@ -448,8 +448,6 @@ func terraform_Disk_QemuVirtIOStorage(config *pveAPI.QemuVirtIOStorage, schema m
 		schema[schemaType] = schemaDisk // yes, passthrough is a disk type
 		schema[schemaWorldWideName] = string(config.Passthrough.WorldWideName)
 		terraformQemuDiskBandwidth(schema, config.Passthrough.Bandwidth)
-	} else if config.CdRom != nil {
-		terraform_Disk_QemuCdRom_unsafe(config.CdRom, schema)
 	}
 	return schema
 }

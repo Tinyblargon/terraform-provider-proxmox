@@ -241,7 +241,7 @@ func SchemaDisks() *schema.Schema {
 							schemaVirtIO + "15": subSchemaVirtio(schemaVirtIO + "15")}}}}}}
 }
 
-func subSchemaCdRom(path string, ci bool) *schema.Schema {
+func subSchemaCdRom(path string, ci bool, deprecated string) *schema.Schema {
 	var conflicts []string
 	if ci {
 		conflicts = []string{path + "." + schemaCloudInit, path + "." + schemaDisk, path + "." + schemaIgnore, path + "." + schemaPassthrough}
@@ -252,6 +252,7 @@ func subSchemaCdRom(path string, ci bool) *schema.Schema {
 		Type:          schema.TypeList,
 		Optional:      true,
 		MaxItems:      1,
+		Deprecated:    deprecated,
 		ConflictsWith: conflicts,
 		Elem: &schema.Resource{
 			Schema: map[string]*schema.Schema{
@@ -615,7 +616,7 @@ func subSchemaIde(slot string) *schema.Schema {
 		MaxItems: 1,
 		Elem: &schema.Resource{
 			Schema: map[string]*schema.Schema{
-				schemaCdRom:     subSchemaCdRom(path, true),
+				schemaCdRom:     subSchemaCdRom(path, true, ""),
 				schemaCloudInit: subSchemaCloudInit(path, slot),
 				schemaDisk: {
 					Type:          schema.TypeList,
@@ -701,7 +702,7 @@ func subSchemaSata(slot string) *schema.Schema {
 		MaxItems: 1,
 		Elem: &schema.Resource{
 			Schema: map[string]*schema.Schema{
-				schemaCdRom:     subSchemaCdRom(path, true),
+				schemaCdRom:     subSchemaCdRom(path, true, ""),
 				schemaCloudInit: subSchemaCloudInit(path, slot),
 				schemaDisk: {
 					Type:          schema.TypeList,
@@ -751,7 +752,7 @@ func subSchemaScsi(slot string) *schema.Schema {
 		MaxItems: 1,
 		Elem: &schema.Resource{
 			Schema: map[string]*schema.Schema{
-				schemaCdRom:     subSchemaCdRom(path, true),
+				schemaCdRom:     subSchemaCdRom(path, true, ""),
 				schemaCloudInit: subSchemaCloudInit(path, slot),
 				schemaDisk: {
 					Type:          schema.TypeList,
@@ -805,7 +806,7 @@ func subSchemaVirtio(setting string) *schema.Schema {
 		MaxItems: 1,
 		Elem: &schema.Resource{
 			Schema: map[string]*schema.Schema{
-				schemaCdRom: subSchemaCdRom(path, false),
+				schemaCdRom: subSchemaCdRom(path, false, path+"."+schemaCdRom+" has no effect"),
 				schemaDisk: {
 					Type:          schema.TypeList,
 					Optional:      true,

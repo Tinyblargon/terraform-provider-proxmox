@@ -564,20 +564,23 @@ func resourceVmQemuCreate(ctx context.Context, d *schema.ResourceData, meta inte
 	var vmr *pveSDK.VmRef
 	if guestID := vmID.Get(d); guestID != 0 { // Manually set vmID
 		log.Print("[DEBUG][QemuVmCreate] checking if vmId: " + guestID.String() + " already exists")
-		guests, err := pveSDK.ListGuests(ctx, client)
+		guests, err := clientNew.Guest.List(ctx)
 		if err != nil {
 			return append(diags, diag.FromErr(err)...)
 		}
-		if rawGuest, ok := guests.SelectID(guestID); ok { // guest already exists
-			forceCreate := d.Get("force_create").(bool)
-			if !forceCreate {
-				return append(diags, diag.Diagnostic{
-					Summary:  "vmId: " + guestID.String() + " already in use. Set force_create=true to recycle",
-					Severity: diag.Error})
+		for e := range guests.Iter() {
+			if e.GetID() == guestID { // guest already exists
+				forceCreate := d.Get("force_create").(bool)
+				if !forceCreate {
+					return append(diags, diag.Diagnostic{
+						Summary:  "vmId: " + guestID.String() + " already in use. Set force_create=true to recycle",
+						Severity: diag.Error})
+				}
+				vmr = pveSDK.NewVmRef(guestID)
+				vmr.SetNode(string(e.GetNode()))
+				vmr.SetVmType(e.GetType())
+				break
 			}
-			vmr = pveSDK.NewVmRef(guestID)
-			vmr.SetNode(string(rawGuest.GetNode()))
-			vmr.SetVmType(rawGuest.GetType())
 		}
 	}
 
@@ -599,7 +602,7 @@ func resourceVmQemuCreate(ctx context.Context, d *schema.ResourceData, meta inte
 		// check if clone, or PXE boot
 		if d.Get("clone").(string) != "" || d.Get("clone_id").(int) != 0 { // Clone
 
-			sourceVmr, err := guestGetSourceVmr(ctx, client, pveSDK.GuestName(d.Get("clone").(string)), pveSDK.GuestID(d.Get("clone_id").(int)), targetNode, pveSDK.GuestQemu, "clone", "clone_id")
+			sourceVmr, err := guestGetSourceVmr(ctx, clientNew.Guest, pveSDK.GuestName(d.Get("clone").(string)), pveSDK.GuestID(d.Get("clone_id").(int)), targetNode, pveSDK.GuestQemu, "clone", "clone_id")
 			if err != nil {
 				return append(diags, diag.FromErr(err)...)
 			}
