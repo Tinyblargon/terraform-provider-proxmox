@@ -384,7 +384,9 @@ func sdk_Disk_QemuVirtIOStorage(virtio *pveAPI.QemuVirtIOStorage, schema map[str
 			}
 		}
 	case enumCdRom:
-		virtio.CdRom, diags = sdk_Disk_QemuCdRom(slot, schema)
+		return diag.Diagnostics{{
+			Severity: diag.Error,
+			Summary:  schemaVirtIO + " can't have " + schemaCdRom}}
 	case enumCloudInit:
 		return diag.Diagnostics{{
 			Severity: diag.Error,

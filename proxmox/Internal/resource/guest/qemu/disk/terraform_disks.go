@@ -359,5 +359,5 @@ func terraform_Disks_QemuVirtIOStorage(config *pveAPI.QemuVirtIOStorage, schema 
 		return []interface{}{map[string]interface{}{
 			schemaPassthrough: []interface{}{mapParams}}}
 	}
-	return terraform_Disks_QemuCdRom(config.CdRom)
+	return nil
 }
