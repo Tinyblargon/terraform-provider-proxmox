@@ -980,6 +980,7 @@ func resourceVmQemuRead(ctx context.Context, d *schema.ResourceData, vmr *pveSDK
 	if len(config.PciDevices) != 0 {
 		pci.Terraform(config.PciDevices, d)
 	}
+	powerstate.Terraform(guestStatus.GetState(), true, d)
 	if config.RandomnessDevice != nil {
 		rng.Terraform(*config.RandomnessDevice, d)
 	}
