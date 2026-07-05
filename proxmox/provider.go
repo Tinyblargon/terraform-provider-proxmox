@@ -381,7 +381,7 @@ func getClient(pm_api_url string,
 			return nil, err
 		}
 		// Unsure how to get an err for this
-		client.SetAPIToken(*tokenID, pveSDK.ApiTokenSecret(pm_api_token_secret))
+		client.SetAPIToken(pveSDK.ApiToken{ID: *tokenID, Secret: pveSDK.ApiTokenSecret(pm_api_token_secret)})
 	}
 
 	if err != nil {

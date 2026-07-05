@@ -440,6 +440,7 @@ func resourceLxcCreate(ctx context.Context, d *schema.ResourceData, meta interfa
 	defer lock.unlock()
 
 	client := pconf.Client
+	clientNew := pconf.NewClient
 
 	config := pveSDK.NewConfigLxc()
 	config.Ostemplate = d.Get("ostemplate").(string)
@@ -520,7 +521,7 @@ func resourceLxcCreate(ctx context.Context, d *schema.ResourceData, meta interfa
 	var vmr *pveSDK.VmRef
 	if d.Get("clone").(string) != "" { // Clone
 		var sourceVmr *pveSDK.VmRef
-		sourceVmr, err = guestGetSourceVmr(ctx, client, pveSDK.GuestName(d.Get("clone").(string)), 0, targetNode, pveSDK.GuestLxc, "clone", "clone_id")
+		sourceVmr, err = guestGetSourceVmr(ctx, clientNew.Guest, pveSDK.GuestName(d.Get("clone").(string)), 0, targetNode, pveSDK.GuestLxc, "clone", "clone_id")
 		if err != nil {
 			return append(diags, diag.FromErr(err)...)
 		}

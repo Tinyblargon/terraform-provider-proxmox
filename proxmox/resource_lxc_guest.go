@@ -95,6 +95,7 @@ func resourceLxcGuestCreate(ctx context.Context, d *schema.ResourceData, meta an
 	diags := lxcGuestWarning()
 
 	client := pconf.Client
+	clientNew := pconf.NewClient
 
 	privileged := privilege.SDK(d)
 	config, tmpDiags := lxcSDK(privileged, d)
@@ -122,7 +123,7 @@ func resourceLxcGuestCreate(ctx context.Context, d *schema.ResourceData, meta an
 		Pool: config.Pool})
 	if cloneGuest != nil {
 		var cloneRef *pveSDK.VmRef
-		cloneRef, err = guestGetSourceVmr(ctx, client, cloneGuest.Name, cloneGuest.ID, targetNode, pveSDK.GuestLxc, clone.Root+" { "+clone.SchemaName+" }", clone.Root+" { "+clone.SchemaID+" }")
+		cloneRef, err = guestGetSourceVmr(ctx, clientNew.Guest, cloneGuest.Name, cloneGuest.ID, targetNode, pveSDK.GuestLxc, clone.Root+" { "+clone.SchemaName+" }", clone.Root+" { "+clone.SchemaID+" }")
 		if err != nil {
 			return append(diags, diag.Diagnostic{
 				Summary:  err.Error(),

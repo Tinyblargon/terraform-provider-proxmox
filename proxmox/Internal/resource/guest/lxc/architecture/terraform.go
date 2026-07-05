@@ -5,6 +5,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
 
-func Terraform(architecture pveSDK.CpuArchitecture, d *schema.ResourceData) {
+func Terraform(architecture pveSDK.LxcCpuArchitecture, d *schema.ResourceData) {
 	d.Set(Root, architecture.String())
 }

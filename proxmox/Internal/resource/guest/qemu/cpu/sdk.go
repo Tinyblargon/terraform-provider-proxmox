@@ -36,7 +36,7 @@ func SDK(d *schema.ResourceData) *pveSDK.QemuCPU {
 			Numa:         util.Pointer(settings[schemaNuma].(bool)),
 			Sockets:      util.Pointer(pveSDK.QemuCpuSockets(settings[schemaSockets].(int))),
 			Type:         util.Pointer(pveSDK.CpuType(settings[schemaType].(string))),
-			Units:        util.Pointer(pveSDK.CpuUnits(settings[schemaUnits].(int))),
+			Units:        new(pveSDK.QemuCpuUnits(settings[schemaUnits].(int))),
 			VirtualCores: util.Pointer(pveSDK.CpuVirtualCores(settings[schemaVirtualCores].(int)))}
 	}
 	return defaults()
@@ -140,6 +140,6 @@ func defaults() *pveSDK.QemuCPU {
 		Numa:         util.Pointer(defaultNuma),
 		Sockets:      util.Pointer(pveSDK.QemuCpuSockets(defaultSockets)),
 		Type:         util.Pointer(pveSDK.CpuType(defaultType)),
-		Units:        util.Pointer(pveSDK.CpuUnits(defaultUnits)),
+		Units:        new(pveSDK.QemuCpuUnits(defaultUnits)),
 		VirtualCores: util.Pointer(pveSDK.CpuVirtualCores(defaultVirtualCores))}
 }
